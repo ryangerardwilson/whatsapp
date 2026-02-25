@@ -67,11 +67,11 @@ Your session is stored in `~/.whatsapp-web` for future runs.
 - `-u`, `--upgrade`: Upgrade via the installer script.
 - `-h`, `--help`: Show help.
 
-## Install (binary release)
+## Install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ryangerardwilson/whatsapp/main/install.sh | bash
 ```
 
-On Arch and other rolling distros, the binary uses your system C++ runtime. If you see
-`CXXABI` or `GLIBCXX` errors, update your system packages and re-run the installer.
+The installer sets up a private virtualenv in `~/.whatsapp/venv` and installs Playwright
+plus browser binaries into your user cache.
