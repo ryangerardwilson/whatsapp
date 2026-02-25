@@ -72,3 +72,6 @@ Your session is stored in `~/.whatsapp-web` for future runs.
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ryangerardwilson/whatsapp/main/install.sh | bash
 ```
+
+On Arch and other rolling distros, the binary uses your system C++ runtime. If you see
+`CXXABI` or `GLIBCXX` errors, update your system packages and re-run the installer.
