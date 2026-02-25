@@ -27,14 +27,6 @@ if isinstance(labels, dict):
 PY
 }
 
-_whatsapp_is_python() {
-  [[ $1 =~ ^python([0-9]+(\.[0-9]+)*)?$ ]]
-}
-
-_whatsapp_is_main_py() {
-  [[ $1 == "main.py" || $1 == */main.py ]]
-}
-
 _whatsapp_complete() {
   local cur prev options
   COMPREPLY=()
@@ -62,9 +54,6 @@ _whatsapp_complete() {
   fi
 
   local cmd_offset=1
-  if _whatsapp_is_python "${COMP_WORDS[0]}" && _whatsapp_is_main_py "${COMP_WORDS[1]}"; then
-    cmd_offset=2
-  fi
 
   if [[ ${COMP_CWORD} -eq $cmd_offset ]]; then
     COMPREPLY=( $(compgen -W "$(_whatsapp_labels)" -- "$cur") )
@@ -100,15 +89,4 @@ _whatsapp_complete() {
   return 0
 }
 
-complete -F _whatsapp_complete whatsapp
-
-_whatsapp_complete_python() {
-  if _whatsapp_is_main_py "${COMP_WORDS[1]}"; then
-    _whatsapp_complete
-    return 0
-  fi
-  return 0
-}
-
-complete -F _whatsapp_complete_python python
-complete -F _whatsapp_complete_python python3
+complete -o bashdefault -o default -F _whatsapp_complete whatsapp
