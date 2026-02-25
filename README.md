@@ -40,7 +40,7 @@ python main.py mom "hello world"
 Add a label from the CLI:
 
 ```bash
-python main.py -a mom "91834384384"
+python main.py -ac mom "91834384384"
 ```
 
 On first run, a browser opens to WhatsApp Web. Scan the QR code to log in.

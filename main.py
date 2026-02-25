@@ -63,6 +63,8 @@ def normalize_contact_labels(payload):
     return cleaned
 
 
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         description="Send a WhatsApp message via WhatsApp Web."
@@ -95,8 +97,8 @@ def build_parser():
         help="Clear the saved WhatsApp Web session.",
     )
     parser.add_argument(
-        "-a",
-        "--add-label",
+        "-ac",
+        "--add-contact",
         nargs=2,
         metavar=("LABEL", "NUMBER"),
         help="Save a contact label to the config.",
@@ -117,6 +119,7 @@ def wait_for_ready(page, timeout_s):
 
         if find_compose_box(page) is not None:
             return
+
 
         qr_visible = False
         for selector in ("div[data-testid='qrcode']", "canvas[aria-label*='Scan']"):
@@ -153,33 +156,40 @@ def find_compose_box(page):
     return None
 
 
+def send_message(page, text):
+    compose = find_compose_box(page)
+    if compose is not None:
+        compose.click()
+        current = compose.inner_text().strip()
+        if not current:
+            page.keyboard.type(text)
+        page.keyboard.press("Enter")
+        return
+    page.click("span[data-icon='send']")
+
+
 def main():
     parser = build_parser()
     args = parser.parse_args()
 
     config_path = get_config_path()
     config = load_config(config_path)
-    labels = normalize_contact_labels(config)
+    contact_labels = normalize_contact_labels(config)
 
-    if args.add_label:
+    if args.add_contact:
         if args.mobile_no or args.text:
-            raise SystemExit("Use --add-label by itself.")
-        label, number = args.add_label
+            raise SystemExit("Use --add-contact by itself.")
+        label, number = args.add_contact
         label = label.strip()
         number = number.strip()
         if not label:
             raise SystemExit("Label cannot be empty.")
         if not number:
             raise SystemExit("Number cannot be empty.")
-        contact_labels = config.get("contact_labels")
-        if contact_labels is None:
-            contact_labels = {}
-            config["contact_labels"] = contact_labels
-        if not isinstance(contact_labels, dict):
-            raise SystemExit("contact_labels must be a JSON object.")
         contact_labels[label] = number
+        config["contact_labels"] = contact_labels
         save_config(config_path, config)
-        print(f"Saved label '{label}' in {config_path}")
+        print(f"Saved contact label '{label}' in {config_path}")
         return
 
     profile_dir = os.path.expanduser(args.profile)
@@ -198,7 +208,7 @@ def main():
         parser.print_help()
         return
 
-    target = labels.get(args.mobile_no, args.mobile_no)
+    target = contact_labels.get(args.mobile_no, args.mobile_no)
     phone = normalize_phone(target)
     message = quote(text)
     url = f"https://web.whatsapp.com/send?phone={phone}&text={message}"
@@ -212,22 +222,10 @@ def main():
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=60000)
         except PlaywrightTimeoutError:
-            raise SystemExit(
-                "Navigation timed out. If this repeats, try running once "
-                "without --headless to refresh the session."
-            )
+            raise SystemExit("Navigation timed out. Try again.")
 
         wait_for_ready(page, args.timeout)
-
-        compose = find_compose_box(page)
-        if compose is not None:
-            compose.click()
-            current = compose.inner_text().strip()
-            if not current:
-                page.keyboard.type(text)
-            page.keyboard.press("Enter")
-        else:
-            page.click("span[data-icon='send']")
+        send_message(page, text)
         time.sleep(1.5)
         print("Message sent.")
         context.close()
