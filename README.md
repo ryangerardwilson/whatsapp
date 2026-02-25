@@ -67,6 +67,20 @@ Your session is stored in `~/.whatsapp-web` for future runs.
 - `-u`, `--upgrade`: Upgrade via the installer script.
 - `-h`, `--help`: Show help.
 
+## Shell completion (bash)
+
+For local development:
+
+```bash
+source completions/whatsapp.bash
+```
+
+For installed binary:
+
+```bash
+source ~/.whatsapp/completions/whatsapp.bash
+```
+
 ## Install
 
 ```bash
