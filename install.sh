@@ -153,6 +153,10 @@ else
   python3 -m venv "$VENV_DIR"
   "$VENV_DIR/bin/python" -m pip install -U pip
   "$VENV_DIR/bin/python" -m pip install -r "$APP_DIR/requirements.txt"
+  if [[ "$(uname -s)" == "Linux" ]] && command -v pacman >/dev/null 2>&1; then
+    print_message info "${MUTED}Arch detected. You may need Playwright deps:${NC}"
+    print_message info "  sudo pacman -S --needed glibc libx11 libxcomposite libxdamage libxfixes libxrandr \\\n+    libxkbcommon libxkbcommon-x11 libxcb libxext libxrender libdrm libegl libglvnd mesa \\\n+    at-spi2-core atk cairo pango alsa-lib cups libxshmfence nss nspr openssl fontconfig \\\n+    freetype2 harfbuzz libjpeg-turbo libpng libwebp"
+  fi
   "$VENV_DIR/bin/python" -m playwright install
 
   cat > "${INSTALL_DIR}/${APP}" <<EOF

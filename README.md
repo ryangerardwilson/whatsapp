@@ -75,3 +75,13 @@ curl -fsSL https://raw.githubusercontent.com/ryangerardwilson/whatsapp/main/inst
 
 The installer sets up a private virtualenv in `~/.whatsapp/venv` and installs Playwright
 plus browser binaries into your user cache.
+
+On Arch Linux, you may need system dependencies for Playwright. If you see warnings,
+install:
+
+```bash
+sudo pacman -S --needed glibc libx11 libxcomposite libxdamage libxfixes libxrandr \
+  libxkbcommon libxkbcommon-x11 libxcb libxext libxrender libdrm libegl libglvnd mesa \
+  at-spi2-core atk cairo pango alsa-lib cups libxshmfence nss nspr openssl fontconfig \
+  freetype2 harfbuzz libjpeg-turbo libpng libwebp
+```
