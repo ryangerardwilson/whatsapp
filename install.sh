@@ -244,7 +244,7 @@ if [[ "$no_modify_path" != "true" ]]; then
       fi
     fi
   fi
-  if [[ "$current_shell" == "bash" && -f "$APP_HOME/completions/whatsapp.bash" ]]; then
+  if [[ ("$current_shell" == "bash" || "$current_shell" == "zsh") && -f "$APP_HOME/completions/whatsapp.bash" ]]; then
     completion_line="source \"$APP_HOME/completions/whatsapp.bash\""
     if [[ -n "$config_file" ]]; then
       add_completion "$config_file" "$completion_line"

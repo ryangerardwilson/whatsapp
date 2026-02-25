@@ -62,6 +62,8 @@ jobs:
               "$PYBIN" -m pip install --only-binary=:all: pyinstaller
               echo "__version__ = \"${VERSION}\"" > _version.py
               "$PYBIN" -m PyInstaller --clean --onedir --name whatsapp main.py
+              mkdir -p dist/whatsapp/completions
+              cp completions/whatsapp.bash dist/whatsapp/completions/whatsapp.bash
               rm -f dist/whatsapp/_internal/libstdc++.so.6 dist/whatsapp/_internal/libgcc_s.so.1
               tar -C dist -czf whatsapp-linux-x64.tar.gz whatsapp
             '
