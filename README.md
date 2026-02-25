@@ -19,6 +19,30 @@ Send a message:
 python main.py "15551234567" "hello world"
 ```
 
+Use contact labels via XDG config:
+
+Create `~/.config/whatsapp/config.json`:
+
+```json
+{
+  "contact_labels": {
+    "mom": "+91438438473"
+  }
+}
+```
+
+Then:
+
+```bash
+python main.py mom "hello world"
+```
+
+Add a label from the CLI:
+
+```bash
+python main.py -a mom "91834384384"
+```
+
 On first run, a browser opens to WhatsApp Web. Scan the QR code to log in.
 Your session is stored in `~/.whatsapp-web` for future runs.
 
