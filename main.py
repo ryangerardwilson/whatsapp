@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import shlex
 import shutil
 import sys
 import time
@@ -155,6 +156,21 @@ def _run_upgrade():
     return bash_rc
 
 
+def _open_config_in_editor():
+    config_path = get_config_path()
+    directory = os.path.dirname(config_path)
+    os.makedirs(directory, exist_ok=True)
+    if not os.path.exists(config_path):
+        with open(config_path, "w", encoding="utf-8") as handle:
+            json.dump({}, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+    editor = (os.getenv("VISUAL") or os.getenv("EDITOR") or "vim").strip()
+    editor_cmd = shlex.split(editor) if editor else ["vim"]
+    if not editor_cmd:
+        editor_cmd = ["vim"]
+    return subprocess.run([*editor_cmd, config_path], check=False).returncode
+
+
 
 
 def build_parser():
@@ -273,8 +289,11 @@ def send_message(page, text):
 
 
 def main():
+    argv = sys.argv[1:]
+    if argv == ["conf"]:
+        return _open_config_in_editor()
     parser = build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.version:
         print(__version__)
