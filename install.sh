@@ -6,7 +6,7 @@ REPO="ryangerardwilson/whatsapp"
 APP_HOME="$HOME/.${APP}"
 INSTALL_DIR="$APP_HOME/bin"
 APP_DIR="$APP_HOME/app"
-VENV_DIR="$APP_HOME/venv"
+FILENAME="whatsapp-linux-x64.tar.gz"
 
 MUTED='\033[0;2m'
 RED='\033[0;31m'
@@ -20,36 +20,51 @@ ${APP} Installer
 Usage: install.sh [options]
 
 Options:
-  -h, --help              Display this help message
-  -v, --version <version> Install a specific version (e.g., 0.1.0 or v0.1.0)
-  -b, --binary <path>     Install from a local binary instead of downloading
-      --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
-
-Examples:
-  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash
-  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash -s -- --version 0.1.0
-  ./install.sh --binary /path/to/whatsapp
+  -h                         Show this help and exit
+  -v [<version>]             Print the latest release version, or install a specific one
+  -u                         Upgrade to the latest release only when newer
+  -b <path>                  Install from a local binary instead of downloading
+  -n                         Do not modify shell config to add to PATH
+      --help                 Compatibility alias for -h
+      --version [<version>]  Compatibility alias for -v
+      --upgrade              Compatibility alias for -u
+      --binary <path>        Compatibility alias for -b
+      --no-modify-path       Compatibility alias for -n
 EOF
 }
 
 requested_version=${VERSION:-}
+show_latest=false
+upgrade=false
 no_modify_path=false
 binary_path=""
+latest_version_cache=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -h|--help) usage; exit 0 ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
     -v|--version)
-      [[ -n "${2:-}" ]] || { echo -e "${RED}Error: --version requires an argument${NC}"; exit 1; }
-      requested_version="$2"
-      shift 2
+      if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+        requested_version="${2#v}"
+        shift 2
+      else
+        show_latest=true
+        shift
+      fi
+      ;;
+    -u|--upgrade)
+      upgrade=true
+      shift
       ;;
     -b|--binary)
-      [[ -n "${2:-}" ]] || { echo -e "${RED}Error: --binary requires a path${NC}"; exit 1; }
+      [[ -n "${2:-}" ]] || { echo -e "${RED}Error: -b requires a path${NC}"; exit 1; }
       binary_path="$2"
       shift 2
       ;;
-    --no-modify-path)
+    -n|--no-modify-path)
       no_modify_path=true
       shift
       ;;
@@ -67,6 +82,47 @@ print_message() {
   [[ "$level" == "error" ]] && color="${RED}"
   echo -e "${color}${message}${NC}"
 }
+
+die() {
+  print_message error "$1"
+  exit 1
+}
+
+get_latest_version() {
+  command -v curl >/dev/null 2>&1 || die "'curl' is required but not installed."
+  if [[ -z "$latest_version_cache" ]]; then
+    local release_url
+    local tag
+    release_url="$(curl -fsSL -o /dev/null -w "%{url_effective}" "https://github.com/${REPO}/releases/latest")" \
+      || die "Unable to determine latest release"
+    tag="${release_url##*/}"
+    tag="${tag#v}"
+    [[ -n "$tag" && "$tag" != "latest" ]] || die "Unable to determine latest release"
+    latest_version_cache="$tag"
+  fi
+  printf '%s\n' "$latest_version_cache"
+}
+
+if $show_latest; then
+  [[ "$upgrade" == false && -z "$binary_path" && -z "$requested_version" ]] || \
+    die "-v (no arg) cannot be combined with other options"
+  get_latest_version
+  exit 0
+fi
+
+if $upgrade; then
+  [[ -z "$binary_path" ]] || die "-u cannot be used with -b"
+  [[ -z "$requested_version" ]] || die "-u cannot be combined with -v <version>"
+  requested_version="$(get_latest_version)"
+  if command -v "${APP}" >/dev/null 2>&1; then
+    installed_version="$(${APP} -v 2>/dev/null || true)"
+    installed_version="${installed_version#v}"
+    if [[ -n "$installed_version" && "$installed_version" == "$requested_version" ]]; then
+      print_message info "${MUTED}${APP} version ${NC}${requested_version}${MUTED} already installed${NC}"
+      exit 0
+    fi
+  fi
+fi
 
 mkdir -p "$INSTALL_DIR"
 
@@ -92,25 +148,14 @@ else
 
   command -v curl >/dev/null 2>&1 || { print_message error "'curl' is required but not installed."; exit 1; }
   command -v tar  >/dev/null 2>&1 || { print_message error "'tar' is required but not installed."; exit 1; }
-  command -v python3 >/dev/null 2>&1 || { print_message error "'python3' is required but not installed."; exit 1; }
 
-  filename="${APP}.tar.gz"
   mkdir -p "$APP_DIR"
 
   if [[ -z "$requested_version" ]]; then
-    specific_version="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-      | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p' || true)"
-    if [[ -n "$specific_version" ]]; then
-      url="https://github.com/${REPO}/archive/refs/tags/v${specific_version}.tar.gz"
-    else
-      specific_version="main"
-      url="https://github.com/${REPO}/archive/refs/heads/main.tar.gz"
-    fi
+    specific_version="$(get_latest_version)"
   else
     requested_version="${requested_version#v}"
-    url="https://github.com/${REPO}/archive/refs/tags/v${requested_version}.tar.gz"
     specific_version="${requested_version}"
-
     http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/${REPO}/releases/tag/v${requested_version}")
     if [[ "$http_status" == "404" ]]; then
       print_message error "Release v${requested_version} not found"
@@ -119,8 +164,10 @@ else
     fi
   fi
 
-  if command -v "${APP}" >/dev/null 2>&1 && [[ "$specific_version" != "main" ]]; then
-    installed_version=$(${APP} --version 2>/dev/null || true)
+  url="https://github.com/${REPO}/releases/download/v${specific_version}/${FILENAME}"
+
+  if command -v "${APP}" >/dev/null 2>&1; then
+    installed_version="$(${APP} -v 2>/dev/null || true)"
     if [[ -n "$installed_version" && "$installed_version" == "$specific_version" ]]; then
       print_message info "${MUTED}${APP} version ${NC}${specific_version}${MUTED} already installed${NC}"
       exit 0
@@ -131,49 +178,24 @@ else
   tmp_dir="${TMPDIR:-/tmp}/${APP}_install_$$"
   mkdir -p "$tmp_dir"
 
-  curl -# -L -o "$tmp_dir/$filename" "$url"
-  tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
+  curl -# -L -o "$tmp_dir/$FILENAME" "$url"
+  tar -xzf "$tmp_dir/$FILENAME" -C "$tmp_dir"
 
-  extracted_dir=$(find "$tmp_dir" -maxdepth 1 -type d -name "${APP}-*" -print -quit)
-  if [[ -z "$extracted_dir" ]]; then
-    print_message error "Archive did not contain expected '${APP}-*' directory"
+  if [[ ! -f "$tmp_dir/${APP}/${APP}" ]]; then
+    print_message error "Archive did not contain expected directory '${APP}/${APP}'"
+    print_message info  "Expected: $tmp_dir/${APP}/${APP}"
     exit 1
   fi
 
   rm -rf "$APP_DIR"
   mkdir -p "$APP_DIR"
-
-  cp "$extracted_dir/main.py" "$APP_DIR/main.py"
-  cp "$extracted_dir/requirements.txt" "$APP_DIR/requirements.txt"
-  cp "$extracted_dir/_version.py" "$APP_DIR/_version.py"
-  if [[ "$specific_version" != "main" && "$specific_version" != "local" ]]; then
-    echo "__version__ = \"${specific_version}\"" > "$APP_DIR/_version.py"
-  fi
-
-  completion_src="$extracted_dir/completions/whatsapp.bash"
-  completion_dst="$APP_HOME/completions/whatsapp.bash"
-  if [[ -f "$completion_src" ]]; then
-    mkdir -p "$APP_HOME/completions"
-    cp "$completion_src" "$completion_dst"
-    chmod 644 "$completion_dst"
-  fi
-
+  mv "$tmp_dir/${APP}" "$APP_DIR"
   rm -rf "$tmp_dir"
-
-  print_message info "${MUTED}Creating virtualenv at ${NC}${VENV_DIR}"
-  python3 -m venv "$VENV_DIR"
-  "$VENV_DIR/bin/python" -m pip install -U pip
-  "$VENV_DIR/bin/python" -m pip install -r "$APP_DIR/requirements.txt"
-  if [[ "$(uname -s)" == "Linux" ]] && command -v pacman >/dev/null 2>&1; then
-    print_message info "${MUTED}Arch detected. You may need Playwright deps:${NC}"
-    print_message info "  sudo pacman -S --needed glibc libx11 libxcomposite libxdamage libxfixes libxrandr libxkbcommon libxkbcommon-x11 libxcb libxext libxrender libdrm libegl libglvnd mesa at-spi2-core atk cairo pango alsa-lib cups libxshmfence nss nspr openssl fontconfig freetype2 harfbuzz libjpeg-turbo libpng libwebp"
-  fi
-  PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1 "$VENV_DIR/bin/python" -m playwright install
 
   cat > "${INSTALL_DIR}/${APP}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-"${HOME}/.${APP}/venv/bin/python" "${HOME}/.${APP}/app/main.py" "\$@"
+"${HOME}/.${APP}/app/${APP}/${APP}" "\$@"
 EOF
   chmod 755 "${INSTALL_DIR}/${APP}"
 fi
@@ -197,42 +219,26 @@ add_to_path() {
   fi
 }
 
-add_completion() {
-  local config_file=$1
-  local command=$2
-
-  if grep -Fxq "$command" "$config_file" 2>/dev/null; then
-    print_message info "${MUTED}Completion entry already present in ${NC}$config_file"
-  elif [[ -w "$config_file" ]]; then
-    {
-      echo ""
-      echo "# ${APP} completion"
-      echo "$command"
-    } >> "$config_file"
-    print_message info "${MUTED}Added ${NC}${APP}${MUTED} completion to ${NC}$config_file"
-  else
-    print_message info "Add this to your shell config:"
-    print_message info "  $command"
-  fi
-}
-
 if [[ "$no_modify_path" != "true" ]]; then
-  XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-$HOME/.config}
-  current_shell=$(basename "${SHELL:-bash}")
-
-  case "$current_shell" in
-    zsh)  config_candidates=("$HOME/.zshrc" "$HOME/.zshenv" "$XDG_CONFIG_HOME/zsh/.zshrc" "$XDG_CONFIG_HOME/zsh/.zshenv") ;;
-    bash) config_candidates=("$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" "$XDG_CONFIG_HOME/bash/.bashrc" "$XDG_CONFIG_HOME/bash/.bash_profile") ;;
-    fish) config_candidates=("$HOME/.config/fish/config.fish") ;;
-    *)    config_candidates=("$HOME/.profile" "$HOME/.bashrc") ;;
-  esac
-
-  config_file=""
-  for f in "${config_candidates[@]}"; do
-    if [[ -f "$f" ]]; then config_file="$f"; break; fi
-  done
-
   if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-$HOME/.config}
+    current_shell=$(basename "${SHELL:-bash}")
+
+    case "$current_shell" in
+      zsh)  config_candidates=("$HOME/.zshrc" "$HOME/.zshenv" "$XDG_CONFIG_HOME/zsh/.zshrc" "$XDG_CONFIG_HOME/zsh/.zshenv") ;;
+      bash) config_candidates=("$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" "$XDG_CONFIG_HOME/bash/.bashrc" "$XDG_CONFIG_HOME/bash/.bash_profile") ;;
+      fish) config_candidates=("$HOME/.config/fish/config.fish") ;;
+      *)    config_candidates=("$HOME/.profile" "$HOME/.bashrc") ;;
+    esac
+
+    config_file=""
+    for f in "${config_candidates[@]}"; do
+      if [[ -f "$f" ]]; then
+        config_file="$f"
+        break
+      fi
+    done
+
     if [[ -z "$config_file" ]]; then
       print_message info "${MUTED}No shell config file found. Manually add:${NC}"
       print_message info "  export PATH=$INSTALL_DIR:\$PATH"
@@ -244,18 +250,6 @@ if [[ "$no_modify_path" != "true" ]]; then
       fi
     fi
   fi
-  if [[ ("$current_shell" == "bash" || "$current_shell" == "zsh") && -f "$APP_HOME/completions/whatsapp.bash" ]]; then
-    completion_line="source \"$APP_HOME/completions/whatsapp.bash\""
-    if [[ -n "$config_file" ]]; then
-      add_completion "$config_file" "$completion_line"
-    else
-      print_message info "Add this to your shell config:"
-      print_message info "  $completion_line"
-    fi
-  fi
 fi
 
-echo ""
-print_message info "${MUTED}Installed ${NC}${APP}${MUTED} to ${NC}${INSTALL_DIR}/${APP}"
-print_message info "${MUTED}Run:${NC} ${APP} --help"
-echo ""
+print_message info "${MUTED}Run:${NC} ${APP} -h"

@@ -1,25 +1,46 @@
 import argparse
 import json
 import os
-import shlex
 import shutil
+import subprocess
 import sys
 import time
+from pathlib import Path
 from urllib.parse import quote
-import subprocess
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
-try:
-    from _version import __version__
-except Exception:
-    __version__ = "0.0.0"
+from _version import __version__
+from rgw_cli_contract import AppSpec, resolve_install_script_path, run_app
 
-INSTALL_URL = "https://raw.githubusercontent.com/ryangerardwilson/whatsapp/main/install.sh"
-LATEST_RELEASE_API = "https://api.github.com/repos/ryangerardwilson/whatsapp/releases/latest"
+INSTALL_SCRIPT = resolve_install_script_path(__file__)
+HELP_TEXT = """whatsapp
+
+flags:
+  whatsapp -h
+    show this help
+  whatsapp -v
+    print the installed version
+  whatsapp -u
+    upgrade to the latest release
+  whatsapp conf
+    open the config in $VISUAL/$EDITOR
+
+features:
+  send a WhatsApp message via WhatsApp Web
+  # whatsapp <phone|label> <message...>
+  whatsapp 919999999999 "hello"
+  whatsapp mom "reached home"
+
+  clear the saved browser session
+  # whatsapp --clear
+  whatsapp --clear
+
+  save a contact label
+  # whatsapp --add-contact <label> <number>
+  whatsapp --add-contact mom 919999999999
+"""
 
 
 def normalize_phone(raw):
@@ -75,107 +96,10 @@ def normalize_contact_labels(payload):
     return cleaned
 
 
-def _version_tuple(version):
-    if not version:
-        return (0,)
-    version = version.strip()
-    if version.startswith("v"):
-        version = version[1:]
-    parts = []
-    for segment in version.split("."):
-        digits = ""
-        for ch in segment:
-            if ch.isdigit():
-                digits += ch
-            else:
-                break
-        if digits == "":
-            break
-        parts.append(int(digits))
-    return tuple(parts) if parts else (0,)
-
-
-def _is_version_newer(candidate, current):
-    cand_tuple = _version_tuple(candidate)
-    curr_tuple = _version_tuple(current)
-    length = max(len(cand_tuple), len(curr_tuple))
-    cand_tuple += (0,) * (length - len(cand_tuple))
-    curr_tuple += (0,) * (length - len(curr_tuple))
-    return cand_tuple > curr_tuple
-
-
-def _get_latest_version(timeout=5.0):
-    try:
-        request = Request(LATEST_RELEASE_API, headers={"User-Agent": "whatsapp-updater"})
-        with urlopen(request, timeout=timeout) as resp:
-            data = resp.read().decode("utf-8", errors="replace")
-    except (URLError, HTTPError, TimeoutError):
-        return None
-    try:
-        payload = json.loads(data)
-    except json.JSONDecodeError:
-        return None
-    tag = payload.get("tag_name") or payload.get("name")
-    if isinstance(tag, str) and tag.strip():
-        return tag.strip()
-    return None
-
-
-def _run_upgrade():
-    try:
-        curl = subprocess.Popen(
-            ["curl", "-fsSL", INSTALL_URL],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-    except FileNotFoundError:
-        print("Upgrade requires curl", file=sys.stderr)
-        return 1
-
-    try:
-        bash = subprocess.Popen(["bash"], stdin=curl.stdout)
-        if curl.stdout is not None:
-            curl.stdout.close()
-    except FileNotFoundError:
-        print("Upgrade requires bash", file=sys.stderr)
-        curl.terminate()
-        curl.wait()
-        return 1
-
-    bash_rc = bash.wait()
-    curl_rc = curl.wait()
-
-    if curl_rc != 0:
-        stderr = (
-            curl.stderr.read().decode("utf-8", errors="replace") if curl.stderr else ""
-        )
-        if stderr:
-            sys.stderr.write(stderr)
-        return curl_rc
-
-    return bash_rc
-
-
-def _open_config_in_editor():
-    config_path = get_config_path()
-    directory = os.path.dirname(config_path)
-    os.makedirs(directory, exist_ok=True)
-    if not os.path.exists(config_path):
-        with open(config_path, "w", encoding="utf-8") as handle:
-            json.dump({}, handle, indent=2, sort_keys=True)
-            handle.write("\n")
-    editor = (os.getenv("VISUAL") or os.getenv("EDITOR") or "vim").strip()
-    editor_cmd = shlex.split(editor) if editor else ["vim"]
-    if not editor_cmd:
-        editor_cmd = ["vim"]
-    return subprocess.run([*editor_cmd, config_path], check=False).returncode
-
-
-
-
 def build_parser():
     parser = argparse.ArgumentParser(
-        description="Send a WhatsApp message via WhatsApp Web."
+        description="Send a WhatsApp message via WhatsApp Web.",
+        add_help=False,
     )
     parser.add_argument(
         "mobile_no",
@@ -210,18 +134,6 @@ def build_parser():
         nargs=2,
         metavar=("LABEL", "NUMBER"),
         help="Save a contact label to the config.",
-    )
-    parser.add_argument(
-        "-v",
-        "--version",
-        action="store_true",
-        help="Show version and exit.",
-    )
-    parser.add_argument(
-        "-u",
-        "--upgrade",
-        action="store_true",
-        help="Upgrade to the latest version.",
     )
     return parser
 
@@ -288,44 +200,13 @@ def send_message(page, text):
     page.click("span[data-icon='send']")
 
 
-def main():
-    argv = sys.argv[1:]
-    if argv == ["conf"]:
-        return _open_config_in_editor()
+def _config_path() -> Path:
+    return Path(get_config_path())
+
+
+def _dispatch(argv: list[str]) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-
-    if args.version:
-        print(__version__)
-        return
-
-    if args.upgrade:
-        if args.mobile_no or args.text or args.add_contact or args.clear:
-            raise SystemExit("Use -u by itself to upgrade.")
-
-        latest = _get_latest_version()
-        if latest is None:
-            print(
-                "Unable to determine latest version; attempting upgrade…",
-                file=sys.stderr,
-            )
-            rc = _run_upgrade()
-            sys.exit(rc)
-
-        if (
-            __version__
-            and __version__ != "0.0.0"
-            and not _is_version_newer(latest, __version__)
-        ):
-            print(f"Already running the latest version ({__version__}).")
-            sys.exit(0)
-
-        if __version__ and __version__ != "0.0.0":
-            print(f"Upgrading from {__version__} to {latest}…")
-        else:
-            print(f"Upgrading to {latest}…")
-        rc = _run_upgrade()
-        sys.exit(rc)
 
     config_path = get_config_path()
     config = load_config(config_path)
@@ -345,7 +226,7 @@ def main():
         config["contact_labels"] = contact_labels
         save_config(config_path, config)
         print(f"Saved contact label '{label}' in {config_path}")
-        return
+        return 0
 
     profile_dir = os.path.expanduser(args.profile)
     if args.clear:
@@ -353,7 +234,7 @@ def main():
             shutil.rmtree(profile_dir, ignore_errors=True)
         if not args.mobile_no and not args.text:
             print("Session cleared.")
-            return
+            return 0
 
     if not args.mobile_no:
         raise SystemExit("Phone number is required unless using --clear only.")
@@ -384,7 +265,24 @@ def main():
         time.sleep(1.5)
         print("Message sent.")
         context.close()
+    return 0
+
+
+APP_SPEC = AppSpec(
+    app_name="whatsapp",
+    version=__version__,
+    help_text=HELP_TEXT,
+    install_script_path=INSTALL_SCRIPT,
+    no_args_mode="help",
+    config_path_factory=_config_path,
+    config_bootstrap_text="{}\n",
+)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    return run_app(APP_SPEC, args, _dispatch)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
