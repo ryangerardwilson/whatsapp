@@ -38,11 +38,9 @@ flags:
 
 features:
   send a WhatsApp message in the background through your existing Chromium session
-  # whatsapp <phone|label> <message...> | whatsapp -fg <phone|label> <message...> | whatsapp -pf <path> <phone|label> <message...>
+  # whatsapp <phone|label> <message...>
   whatsapp 919999999999 "hello"
   whatsapp mom "reached home"
-  whatsapp -fg mom "reached home"
-  whatsapp -pf ~/.whatsapp-web mom "reached home"
 
   check the status of a background send
   # whatsapp st [job_id]
@@ -50,12 +48,12 @@ features:
   whatsapp st 20260321123045-1a2b3c4d
 
   clear the saved browser session
-  # whatsapp -c
-  whatsapp -c
+  # whatsapp c
+  whatsapp c
 
   save a contact label
-  # whatsapp -ac <label> <number>
-  whatsapp -ac mom 919999999999
+  # whatsapp ac <label> <number>
+  whatsapp ac mom 919999999999
 """
 
 
@@ -356,10 +354,10 @@ def spawn_background_worker(argv):
         raise SystemExit(f"Unable to start background worker: {exc}") from exc
 
 
-def should_background_send(worker_mode, foreground_mode, profile_dir, cdp_endpoint):
-    if worker_mode or foreground_mode:
+def should_background_send(worker_mode, cdp_endpoint):
+    if worker_mode:
         return False
-    return bool(profile_dir or cdp_endpoint)
+    return bool(cdp_endpoint)
 
 
 def _recipient_label(raw_target, phone):
@@ -434,35 +432,11 @@ def build_parser():
         help="Message text to send.",
     )
     parser.add_argument(
-        "-pf",
-        dest="profile",
-        help="Path for a dedicated WhatsApp Web session profile.",
-    )
-    parser.add_argument(
-        "-fg",
-        dest="foreground",
-        action="store_true",
-        help="Run in the foreground instead of spawning a background worker.",
-    )
-    parser.add_argument(
         "-tm",
         dest="timeout",
         type=int,
         default=120,
-        help="Timeout in seconds to wait for login/send.",
-    )
-    parser.add_argument(
-        "-c",
-        dest="clear",
-        action="store_true",
-        help="Clear the saved WhatsApp Web session.",
-    )
-    parser.add_argument(
-        "-ac",
-        dest="add_contact",
-        nargs=2,
-        metavar=("LABEL", "NUMBER"),
-        help="Save a contact label to the config.",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "-bg",
@@ -566,33 +540,6 @@ def create_background_page(browser, context):
     return page_info.value
 
 
-def send_message_via_managed_browser(url, text, timeout_s, profile_dir):
-    playwright_symbols = _playwright_symbols()
-    if playwright_symbols is None:
-        raise SystemExit("Missing dependency: playwright. Install requirements.txt first.")
-    sync_playwright, PlaywrightTimeoutError = playwright_symbols
-
-    with _playwright_env():
-        with sync_playwright() as playwright:
-            context = playwright.chromium.launch_persistent_context(
-                profile_dir,
-                headless=False,
-            )
-            page = context.pages[0] if context.pages else context.new_page()
-            try:
-                try:
-                    page.goto(url, wait_until="domcontentloaded", timeout=60000)
-                except PlaywrightTimeoutError as exc:
-                    raise SystemExit("Navigation timed out. Try again.") from exc
-
-                wait_for_ready(page, timeout_s)
-                send_message(page, text)
-                time.sleep(1.5)
-                print("Message sent.")
-            finally:
-                context.close()
-
-
 def send_message_via_existing_chromium(url, text, timeout_s, cdp_endpoint):
     playwright_symbols = _playwright_symbols()
     if playwright_symbols is None:
@@ -637,20 +584,19 @@ def send_message_via_existing_chromium(url, text, timeout_s, cdp_endpoint):
                         pass
 
 
-def execute_send(args, config, raw_target, phone, text, url, profile_dir):
-    cdp_endpoint = None if profile_dir else find_cdp_endpoint(config)
+def execute_send(args, config, raw_target, phone, text, url):
+    cdp_endpoint = find_cdp_endpoint(config)
     recipient = _recipient_label(raw_target, phone)
 
-    if should_background_send(args.worker, args.foreground, profile_dir, cdp_endpoint):
+    if should_background_send(args.worker, cdp_endpoint):
         job = create_background_job(raw_target, phone, text)
         try:
             spawn_background_worker(
-                    [
+                [
                     "-jid",
                     job["id"],
                     "-tm",
                     str(args.timeout),
-                    *(["-pf", args.profile] if args.profile else []),
                     raw_target,
                     text,
                 ]
@@ -665,15 +611,12 @@ def execute_send(args, config, raw_target, phone, text, url, profile_dir):
         update_background_job(args.job_id, "running")
 
     try:
-        if profile_dir:
-            send_message_via_managed_browser(url, text, args.timeout, profile_dir)
-        elif cdp_endpoint:
+        if cdp_endpoint:
             send_message_via_existing_chromium(url, text, args.timeout, cdp_endpoint)
         else:
             if not open_existing_browser(url, config):
                 raise SystemExit(
-                    "No Chromium command was found. Install chromium, set WHATSAPP_BROWSER_COMMAND, "
-                    "or use -pf for a dedicated Playwright session."
+                    "No Chromium command was found. Install chromium or set WHATSAPP_BROWSER_COMMAND."
                 )
             print(
                 "Opened WhatsApp Web in Chromium. "
@@ -720,19 +663,22 @@ def _dispatch(argv: list[str]) -> int:
             raise SystemExit("Usage: whatsapp st [job_id]")
         return print_background_job_status(argv[1] if len(argv) == 2 else None)
 
-    parser = build_parser()
-    args = parser.parse_args(argv)
+    if argv and argv[0] == "c":
+        if len(argv) != 1:
+            raise SystemExit("Usage: whatsapp c")
+        clear_managed_session(os.path.expanduser(DEFAULT_MANAGED_PROFILE_DIR))
+        print("Managed session cleared.")
+        return 0
 
     config_path = get_config_path()
     config = load_config(config_path)
     contact_labels = normalize_contact_labels(config)
 
-    if args.add_contact:
-        if args.mobile_no or args.text:
-            raise SystemExit("Use -ac by itself.")
-        label, number = args.add_contact
-        label = label.strip()
-        number = number.strip()
+    if argv and argv[0] == "ac":
+        if len(argv) != 3:
+            raise SystemExit("Usage: whatsapp ac <label> <number>")
+        label = argv[1].strip()
+        number = argv[2].strip()
         if not label:
             raise SystemExit("Label cannot be empty.")
         if not number:
@@ -743,16 +689,11 @@ def _dispatch(argv: list[str]) -> int:
         print(f"Saved contact label '{label}' in {config_path}")
         return 0
 
-    profile_dir = os.path.expanduser(args.profile) if args.profile else None
-    if args.clear:
-        clear_target = profile_dir or os.path.expanduser(DEFAULT_MANAGED_PROFILE_DIR)
-        clear_managed_session(clear_target)
-        if not args.mobile_no and not args.text:
-            print("Managed session cleared.")
-            return 0
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     if not args.mobile_no:
-        raise SystemExit("Phone number is required unless using -c only.")
+        raise SystemExit("Usage: whatsapp <phone|label> <message...>")
 
     text = " ".join(args.text).strip()
     if not text:
@@ -764,7 +705,7 @@ def _dispatch(argv: list[str]) -> int:
     phone = normalize_phone(target)
     message = quote(text)
     url = f"https://web.whatsapp.com/send?phone={phone}&text={message}"
-    return execute_send(args, config, raw_target, phone, text, url, profile_dir)
+    return execute_send(args, config, raw_target, phone, text, url)
 
 
 APP_SPEC = AppSpec(

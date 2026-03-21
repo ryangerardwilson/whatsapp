@@ -106,47 +106,27 @@ class BrowserReuseTests(unittest.TestCase):
                 self.assertEqual(rc, 0)
                 self.assertEqual(json.loads(stdout.getvalue()), payload)
 
-    def test_foreground_flag_uses_existing_chromium_automation(self):
-        with patch.object(sys, "argv", ["main.py", "-fg", "919999999999", "hello world"]):
-            with patch.object(main, "load_config", return_value={}):
-                with patch.object(main, "find_cdp_endpoint", return_value="http://127.0.0.1:9222"):
-                    with patch.object(main, "send_message_via_existing_chromium") as send_existing:
-                        rc = main.main()
-        self.assertEqual(rc, 0)
-        send_existing.assert_called_once()
-        args = send_existing.call_args[0]
-        self.assertEqual(args[1], "hello world")
-        self.assertEqual(args[2], 120)
-        self.assertEqual(args[3], "http://127.0.0.1:9222")
-
-    def test_profile_flag_spawns_background_worker_by_default(self):
+    def test_add_contact_command_updates_config(self):
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.dict(main.os.environ, {"XDG_STATE_HOME": tmp}, clear=False):
-                with patch.object(main, "_new_job_id", return_value="job-456"):
-                    with patch.object(
-                        sys,
-                        "argv",
-                        ["main.py", "-pf", "~/tmp-wa", "919999999999", "hello world"],
-                    ):
-                        with patch.object(main, "load_config", return_value={}):
-                            with patch.object(main, "spawn_background_worker") as spawn_worker:
-                                with patch.object(main, "send_message_via_managed_browser") as send_managed:
-                                    rc = main.main()
+            with patch.dict(main.os.environ, {"XDG_CONFIG_HOME": tmp}, clear=False):
+                with patch.object(sys, "argv", ["main.py", "ac", "mom", "919999999999"]):
+                    rc = main.main()
                 self.assertEqual(rc, 0)
-                spawn_worker.assert_called_once_with(
-                    [
-                        "-jid",
-                        "job-456",
-                        "-tm",
-                        "120",
-                        "-pf",
-                        "~/tmp-wa",
-                        "919999999999",
-                        "hello world",
-                    ]
-                )
-                send_managed.assert_not_called()
-                self.assertEqual(main.resolve_background_job_id(), "job-456")
+                config = main.load_config(main.get_config_path())
+                self.assertEqual(config["contact_labels"]["mom"], "919999999999")
+
+    def test_clear_command_removes_managed_session(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            managed_dir = Path(tmp) / ".whatsapp-web"
+            managed_dir.mkdir()
+            (managed_dir / "test.txt").write_text("x", encoding="utf-8")
+            with patch.dict(main.os.environ, {"HOME": tmp}, clear=False):
+                with patch.object(sys, "argv", ["main.py", "c"]):
+                    with patch("sys.stdout", new=StringIO()) as stdout:
+                        rc = main.main()
+            self.assertEqual(rc, 0)
+            self.assertFalse(managed_dir.exists())
+            self.assertIn("Managed session cleared.", stdout.getvalue())
 
     def test_worker_mode_notifies_on_success_and_updates_job(self):
         with tempfile.TemporaryDirectory() as tmp:

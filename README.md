@@ -35,12 +35,6 @@ send automatically in the background.
 Without a DevTools endpoint, it opens a prefilled draft in your current browser
 and tells you to press Enter in the tab to send.
 
-If you want the command to stay attached to the terminal, use `-fg`:
-
-```bash
-python main.py -fg mom "hello world"
-```
-
 Show version:
 
 ```bash
@@ -74,30 +68,14 @@ python main.py mom "hello world"
 Add a label from the CLI:
 
 ```bash
-python main.py -ac mom "91834384384"
+python main.py ac mom "91834384384"
 ```
 
-On first run, your existing Chromium tab opens to WhatsApp Web. Scan the QR code
-there if needed.
-
-If you still want the old isolated-browser behavior, pass `-pf`:
+Clear the old managed browser session:
 
 ```bash
-python main.py -pf ~/.whatsapp-web "15551234567" "hello world"
+python main.py c
 ```
-
-That launches a dedicated Playwright-managed Chromium profile and keeps its
-session under the supplied profile path.
-
-## Options
-
-- `-pf`: Use a dedicated Playwright-managed WhatsApp Web session instead of your existing Chromium.
-- `-fg`: Keep the send in the foreground instead of detaching to a background worker.
-- `-tm`: Seconds to wait for login/send (default: 120).
-- `-c`: Clear the saved WhatsApp Web session.
-- `-v`: Print version and exit.
-- `-u`: Upgrade via the installer script.
-- `-h`: Show help.
 
 ## Shell completion (bash)
 
