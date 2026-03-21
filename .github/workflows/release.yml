@@ -66,6 +66,7 @@ jobs:
               cp install.sh dist/whatsapp/
               cp completions/whatsapp.bash dist/whatsapp/completions/whatsapp.bash
               rm -f dist/whatsapp/_internal/libstdc++.so.6 dist/whatsapp/_internal/libgcc_s.so.1
+              "$PYBIN" .github/scripts/clear-execstack.py dist/whatsapp
               tar -C dist -czf whatsapp-linux-x64.tar.gz whatsapp
             '
 
