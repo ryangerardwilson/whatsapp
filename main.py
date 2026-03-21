@@ -38,10 +38,11 @@ flags:
 
 features:
   send a WhatsApp message in the background through your existing Chromium session
-  # whatsapp <phone|label> <message...> | whatsapp -fg <phone|label> <message...>
+  # whatsapp <phone|label> <message...> | whatsapp -fg <phone|label> <message...> | whatsapp -pf <path> <phone|label> <message...>
   whatsapp 919999999999 "hello"
   whatsapp mom "reached home"
   whatsapp -fg mom "reached home"
+  whatsapp -pf ~/.whatsapp-web mom "reached home"
 
   check the status of a background send
   # whatsapp st [job_id]
@@ -49,12 +50,12 @@ features:
   whatsapp st 20260321123045-1a2b3c4d
 
   clear the saved browser session
-  # whatsapp --clear
-  whatsapp --clear
+  # whatsapp -c
+  whatsapp -c
 
   save a contact label
-  # whatsapp --add-contact <label> <number>
-  whatsapp --add-contact mom 919999999999
+  # whatsapp -ac <label> <number>
+  whatsapp -ac mom 919999999999
 """
 
 
@@ -342,7 +343,7 @@ def _self_command(extra_args):
 
 
 def spawn_background_worker(argv):
-    command = _self_command(["--worker", *argv])
+    command = _self_command(["-bg", *argv])
     try:
         subprocess.Popen(
             command,
@@ -433,7 +434,8 @@ def build_parser():
         help="Message text to send.",
     )
     parser.add_argument(
-        "--profile",
+        "-pf",
+        dest="profile",
         help="Path for a dedicated WhatsApp Web session profile.",
     )
     parser.add_argument(
@@ -443,31 +445,34 @@ def build_parser():
         help="Run in the foreground instead of spawning a background worker.",
     )
     parser.add_argument(
-        "--timeout",
+        "-tm",
+        dest="timeout",
         type=int,
         default=120,
         help="Timeout in seconds to wait for login/send.",
     )
     parser.add_argument(
         "-c",
-        "--clear",
+        dest="clear",
         action="store_true",
         help="Clear the saved WhatsApp Web session.",
     )
     parser.add_argument(
         "-ac",
-        "--add-contact",
+        dest="add_contact",
         nargs=2,
         metavar=("LABEL", "NUMBER"),
         help="Save a contact label to the config.",
     )
     parser.add_argument(
-        "--worker",
+        "-bg",
+        dest="worker",
         action="store_true",
         help=argparse.SUPPRESS,
     )
     parser.add_argument(
-        "--job-id",
+        "-jid",
+        dest="job_id",
         help=argparse.SUPPRESS,
     )
     return parser
@@ -640,12 +645,12 @@ def execute_send(args, config, raw_target, phone, text, url, profile_dir):
         job = create_background_job(raw_target, phone, text)
         try:
             spawn_background_worker(
-                [
-                    "--job-id",
+                    [
+                    "-jid",
                     job["id"],
-                    "--timeout",
+                    "-tm",
                     str(args.timeout),
-                    *(["--profile", args.profile] if args.profile else []),
+                    *(["-pf", args.profile] if args.profile else []),
                     raw_target,
                     text,
                 ]
@@ -668,7 +673,7 @@ def execute_send(args, config, raw_target, phone, text, url, profile_dir):
             if not open_existing_browser(url, config):
                 raise SystemExit(
                     "No Chromium command was found. Install chromium, set WHATSAPP_BROWSER_COMMAND, "
-                    "or use --profile for a dedicated Playwright session."
+                    "or use -pf for a dedicated Playwright session."
                 )
             print(
                 "Opened WhatsApp Web in Chromium. "
@@ -710,7 +715,7 @@ def _config_path() -> Path:
 
 
 def _dispatch(argv: list[str]) -> int:
-    if argv and argv[0] in {"st", "status"}:
+    if argv and argv[0] == "st":
         if len(argv) > 2:
             raise SystemExit("Usage: whatsapp st [job_id]")
         return print_background_job_status(argv[1] if len(argv) == 2 else None)
@@ -724,7 +729,7 @@ def _dispatch(argv: list[str]) -> int:
 
     if args.add_contact:
         if args.mobile_no or args.text:
-            raise SystemExit("Use --add-contact by itself.")
+            raise SystemExit("Use -ac by itself.")
         label, number = args.add_contact
         label = label.strip()
         number = number.strip()
@@ -747,7 +752,7 @@ def _dispatch(argv: list[str]) -> int:
             return 0
 
     if not args.mobile_no:
-        raise SystemExit("Phone number is required unless using --clear only.")
+        raise SystemExit("Phone number is required unless using -c only.")
 
     text = " ".join(args.text).strip()
     if not text:

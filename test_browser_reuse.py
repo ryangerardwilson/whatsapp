@@ -69,9 +69,9 @@ class BrowserReuseTests(unittest.TestCase):
                 self.assertEqual(rc, 0)
                 spawn_worker.assert_called_once_with(
                     [
-                        "--job-id",
+                        "-jid",
                         "job-123",
-                        "--timeout",
+                        "-tm",
                         "120",
                         "919999999999",
                         "hello world",
@@ -126,7 +126,7 @@ class BrowserReuseTests(unittest.TestCase):
                     with patch.object(
                         sys,
                         "argv",
-                        ["main.py", "--profile", "~/tmp-wa", "919999999999", "hello world"],
+                        ["main.py", "-pf", "~/tmp-wa", "919999999999", "hello world"],
                     ):
                         with patch.object(main, "load_config", return_value={}):
                             with patch.object(main, "spawn_background_worker") as spawn_worker:
@@ -135,11 +135,11 @@ class BrowserReuseTests(unittest.TestCase):
                 self.assertEqual(rc, 0)
                 spawn_worker.assert_called_once_with(
                     [
-                        "--job-id",
+                        "-jid",
                         "job-456",
-                        "--timeout",
+                        "-tm",
                         "120",
-                        "--profile",
+                        "-pf",
                         "~/tmp-wa",
                         "919999999999",
                         "hello world",
@@ -158,8 +158,8 @@ class BrowserReuseTests(unittest.TestCase):
                     "argv",
                     [
                         "main.py",
-                        "--worker",
-                        "--job-id",
+                        "-bg",
+                        "-jid",
                         "job-789",
                         "mom",
                         "hello world from background",
@@ -195,8 +195,8 @@ class BrowserReuseTests(unittest.TestCase):
                     "argv",
                     [
                         "main.py",
-                        "--worker",
-                        "--job-id",
+                        "-bg",
+                        "-jid",
                         "job-999",
                         "919999999999",
                         "hello world",

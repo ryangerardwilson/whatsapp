@@ -80,10 +80,10 @@ python main.py -ac mom "91834384384"
 On first run, your existing Chromium tab opens to WhatsApp Web. Scan the QR code
 there if needed.
 
-If you still want the old isolated-browser behavior, pass `--profile`:
+If you still want the old isolated-browser behavior, pass `-pf`:
 
 ```bash
-python main.py --profile ~/.whatsapp-web "15551234567" "hello world"
+python main.py -pf ~/.whatsapp-web "15551234567" "hello world"
 ```
 
 That launches a dedicated Playwright-managed Chromium profile and keeps its
@@ -91,13 +91,13 @@ session under the supplied profile path.
 
 ## Options
 
-- `--profile`: Use a dedicated Playwright-managed WhatsApp Web session instead of your existing Chromium.
+- `-pf`: Use a dedicated Playwright-managed WhatsApp Web session instead of your existing Chromium.
 - `-fg`: Keep the send in the foreground instead of detaching to a background worker.
-- `--timeout`: Seconds to wait for login/send (default: 120).
-- `-c`, `--clear`: Clear the saved WhatsApp Web session.
-- `-v`, `--version`: Print version and exit.
-- `-u`, `--upgrade`: Upgrade via the installer script.
-- `-h`, `--help`: Show help.
+- `-tm`: Seconds to wait for login/send (default: 120).
+- `-c`: Clear the saved WhatsApp Web session.
+- `-v`: Print version and exit.
+- `-u`: Upgrade via the installer script.
+- `-h`: Show help.
 
 ## Shell completion (bash)
 
