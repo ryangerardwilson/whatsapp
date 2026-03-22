@@ -97,6 +97,13 @@ source ~/.whatsapp/completions/whatsapp.bash
 curl -fsSL https://raw.githubusercontent.com/ryangerardwilson/whatsapp/main/install.sh | bash
 ```
 
+Manually add this to `~/.bashrc`, then reload your shell:
+
+```bash
+export PATH="$HOME/.whatsapp/bin:$PATH"
+source ~/.bashrc
+```
+
 The installer sets up a private virtualenv in `~/.whatsapp/venv` and installs Playwright
 plus browser binaries into your user cache.
 
