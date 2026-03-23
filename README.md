@@ -88,7 +88,7 @@ source completions/whatsapp.bash
 For installed binary:
 
 ```bash
-source ~/.whatsapp/completions/whatsapp.bash
+[ -r "$HOME/.whatsapp/app/whatsapp/completions/whatsapp.bash" ] && source "$HOME/.whatsapp/app/whatsapp/completions/whatsapp.bash"
 ```
 
 ## Install
@@ -97,15 +97,18 @@ source ~/.whatsapp/completions/whatsapp.bash
 curl -fsSL https://raw.githubusercontent.com/ryangerardwilson/whatsapp/main/install.sh | bash
 ```
 
-Manually add this to `~/.bashrc`, then reload your shell:
+If `~/.local/bin` is not already on your `PATH`, add it once to `~/.bashrc`
+and reload your shell:
 
 ```bash
-export PATH="$HOME/.whatsapp/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
 source ~/.bashrc
 ```
 
-The installer sets up a private virtualenv in `~/.whatsapp/venv` and installs Playwright
-plus browser binaries into your user cache.
+The installer keeps app state under `~/.whatsapp`, publishes the user-facing
+command at `~/.local/bin/whatsapp`, and sets up a private virtualenv in
+`~/.whatsapp/venv`. It also installs Playwright plus browser binaries into your
+user cache.
 
 ## Existing Chromium Auto-Send
 
