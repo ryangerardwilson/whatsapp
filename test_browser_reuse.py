@@ -26,6 +26,47 @@ with patch.dict(sys.modules, {"rgw_cli_contract": fake_contract}):
 
 
 class BrowserReuseTests(unittest.TestCase):
+    def test_notify_prefers_quickshell_bar(self):
+        def which(command):
+            if command in {"quickshell", "notify-send"}:
+                return f"/usr/bin/{command}"
+            return None
+
+        with patch.object(main.shutil, "which", side_effect=which), patch.object(
+            main.subprocess,
+            "run",
+            return_value=types.SimpleNamespace(returncode=0),
+        ) as run:
+            main._notify("WhatsApp sent", "mom: hello", urgency="normal")
+
+        args = run.call_args.args[0]
+        self.assertEqual(args[0], "/usr/bin/quickshell")
+        self.assertEqual(args[1:3], ["ipc", "-p"])
+        self.assertIn("quickshell/omarchy-bar", args[3])
+        self.assertEqual(args[4:7], ["call", "bar", "notify"])
+        self.assertEqual(args[7:], ["WhatsApp sent", "mom: hello", "normal"])
+
+    def test_notify_falls_back_to_notify_send(self):
+        def which(command):
+            if command in {"quickshell", "notify-send"}:
+                return f"/usr/bin/{command}"
+            return None
+
+        with patch.object(main.shutil, "which", side_effect=which), patch.object(
+            main.subprocess,
+            "run",
+            side_effect=[
+                types.SimpleNamespace(returncode=1),
+                types.SimpleNamespace(returncode=0),
+            ],
+        ) as run:
+            main._notify("WhatsApp send failed", "Timed out", urgency="critical")
+
+        fallback_args = run.call_args_list[1].args[0]
+        self.assertEqual(fallback_args[0], "/usr/bin/notify-send")
+        self.assertIn("-u", fallback_args)
+        self.assertIn("critical", fallback_args)
+
     def test_playwright_env_adds_no_deprecation_temporarily(self):
         with patch.dict(main.os.environ, {}, clear=True):
             with main._playwright_env():

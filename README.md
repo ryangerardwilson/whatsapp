@@ -21,7 +21,8 @@ python main.py "15551234567" "hello world"
 
 By default, `whatsapp` now reuses your existing Chromium session and detaches
 immediately if it can auto-send. When the send completes, it posts a desktop
-notification through `notify-send`, which shows up in `mako`.
+notification through the Quickshell bar, falling back to `notify-send` when the
+bar is unavailable.
 
 For agent polling, `python main.py st` prints the latest background job as JSON.
 You can also query a specific job with `python main.py st <job_id>`.

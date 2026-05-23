@@ -205,6 +205,33 @@ def find_cdp_endpoint(config):
 
 
 def _notify(summary, body=None, urgency="normal"):
+    quickshell = shutil.which("quickshell")
+    if quickshell:
+        config_home = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+        bar_path = Path(config_home) / "quickshell" / "omarchy-bar"
+        try:
+            result = subprocess.run(
+                [
+                    quickshell,
+                    "ipc",
+                    "-p",
+                    str(bar_path),
+                    "call",
+                    "bar",
+                    "notify",
+                    summary,
+                    body or "",
+                    urgency,
+                ],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if result.returncode == 0:
+                return
+        except OSError:
+            pass
+
     notify_send = shutil.which("notify-send")
     if not notify_send:
         return
